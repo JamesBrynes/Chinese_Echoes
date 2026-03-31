@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>赛博国风 - 终极工作站 V9</title>
+    <style>
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; background-color: #050505; color: #fff; font-family: 'Courier New', Courier, monospace; overflow: hidden; user-select: none; }
+        #canvas { display: block; position: absolute; top: 0; left: 0; z-index: 1; pointer-events: none; }
+
+        #ui { position: absolute; top: 20px; right: 20px; z-index: 50; background: rgba(10, 10, 10, 0.85); border-radius: 8px; border: 1px solid #333; box-shadow: 0 0 15px rgba(0, 255, 255, 0.3); width: 280px; transition: all 0.3s ease; backdrop-filter: blur(5px); }
+        #ui-header { padding: 12px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #333; background: rgba(20,20,20,0.5); font-weight: bold; }
+        #ui-header:hover { background: rgba(30,30,30,0.8); }
+        #fold-icon { transition: transform 0.3s; color: #0ff; }
+        .collapsed #fold-icon { transform: rotate(-90deg); }
+        #ui-content { padding: 15px; display: block; max-height: 80vh; overflow-y: auto; }
+        .collapsed #ui-content { display: none; }
+
+        .section-title { color: #888; font-size: 0.9em; margin: 15px 0 5px 0; border-bottom: 1px solid #222; padding-bottom: 3px;}
+        .control-group { margin-bottom: 10px; display: flex; align-items: center; font-size: 0.85em;}
+        .control-group label { width: 90px; font-weight: bold; }
+        .control-group input[type="range"] { flex: 1; margin: 0 8px; cursor: pointer;}
+        .val-display { width: 45px; text-align: right; color: #0ff; font-size: 0.8em;}
+
+        .color-guzheng { color: #00ffff; } .color-flute { color: #00ff00; } .color-pipa { color: #ffff00; } .color-erhu { color: #ff00ff; }
+
+        #play-btn { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 80px; height: 80px; border-radius: 50%; background: rgba(0,0,0,0.6); border: 2px solid #fff; display: flex; justify-content: center; align-items: center; cursor: pointer; z-index: 40; transition: all 0.3s; box-shadow: 0 0 20px rgba(255,255,255,0.2); }
+        #play-btn:hover { transform: translate(-50%, -50%) scale(1.1); box-shadow: 0 0 30px rgba(255,255,255,0.5); }
+        #play-btn.playing { border-color: #0ff; box-shadow: 0 0 40px rgba(0,255,255,0.6); }
+        .play-icon { width: 0; height: 0; border-top: 15px solid transparent; border-bottom: 15px solid transparent; border-left: 25px solid #fff; margin-left: 5px; transition: all 0.3s;}
+        .playing .play-icon { border-top: 0; border-bottom: 0; border-left: 0; width: 20px; height: 20px; background: #0ff; margin-left: 0; }
+
+        .seq-container { position: absolute; width: 40%; height: 35px; background: rgba(0,0,0,0.5); border: 1px solid #333; display: flex; z-index: 30; backdrop-filter: blur(2px); }
+        #seq-guzheng { bottom: 55%; left: 5%; border-color: rgba(0,255,255,0.3); } #seq-flute { bottom: 55%; right: 5%; border-color: rgba(0,255,0,0.3); }
+        #seq-pipa { bottom: 5%; left: 5%; border-color: rgba(255,255,0,0.3); } #seq-erhu { bottom: 5%; right: 5%; border-color: rgba(255,0,255,0.3); }
+        .step { flex: 1; border-right: 1px solid rgba(255,255,255,0.1); cursor: pointer; transition: background 0.1s; position: relative; }
+        .step:last-child { border-right: none; }
+        .step.on-guzheng { background: rgba(0, 255, 255, 0.6); box-shadow: 0 0 10px #0ff; } .step.on-flute { background: rgba(0, 255, 0, 0.6); box-shadow: 0 0 10px #0f0; }
+        .step.on-pipa { background: rgba(255, 255, 0, 0.6); box-shadow: 0 0 10px #ff0; } .step.on-erhu { background: rgba(255, 0, 255, 0.6); box-shadow: 0 0 10px #f0f; }
+        .step.playing-head::after { content: ''; position: absolute; bottom: 0; left: 0; width: 100%; height: 4px; background: #fff; box-shadow: 0 0 10px #fff; }
+
+        #loading { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: #000; color: #0ff; display: flex; justify-content: center; align-items: center; font-size: 1.5em; z-index: 99; transition: opacity 0.5s; }
+        .quadrant-bg { position: absolute; width: 50%; height: 50%; z-index: 0; opacity: 0; transition: opacity 0.2s; }
+        .quadrant-bg.active { opacity: 0.1; }
+
+        #test-tone-btn { width: 100%; padding: 10px; background: #00ffff; color: #000; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; margin-bottom: 10px; box-shadow: 0 0 10px rgba(0,255,255,0.5); }
+        #test-tone-btn:active { background: #00cccc; transform: scale(0.98); }
+    </style>
+</head>
+<body class="collapsed">
+
+<div id="loading">引擎重新挂载中...</div>
+
+<div class="quadrant-bg" id="bg-guzheng" style="top:0; left:0; background: radial-gradient(circle at center, #00ffff 0%, transparent 70%);"></div>
+<div class="quadrant-bg" id="bg-flute" style="top:0; right:0; background: radial-gradient(circle at center, #00ff00 0%, transparent 70%);"></div>
+<div class="quadrant-bg" id="bg-pipa" style="bottom:0; left:0; background: radial-gradient(circle at center, #ffff00 0%, transparent 70%);"></div>
+<div class="quadrant-bg" id="bg-erhu" style="bottom:0; right:0; background: radial-gradient(circle at center, #ff00ff 0%, transparent 70%);"></div>
+
+<canvas id="canvas"></canvas>
+<div id="play-btn"><div class="play-icon"></div></div>
+
+<div id="seq-guzheng" class="seq-container" data-inst="guzheng"></div>
+<div id="seq-flute" class="seq-container" data-inst="flute"></div>
+<div id="seq-pipa" class="seq-container" data-inst="pipa"></div>
+<div id="seq-erhu" class="seq-container" data-inst="erhu"></div>
+
+<div id="ui">
+    <div id="ui-header"><span>>>> 调制矩阵 & 步进器</span><span id="fold-icon">▼</span></div>
+    <div id="ui-content">
+        <button id="test-tone-btn">🔈 点我测试扬声器硬件</button>
+        <div style="font-size: 0.75em; color: #888; margin-bottom: 10px;">
+            * 手动：长按空白处 (精确点击生出粒子)<br>
+            * 步进：点击或拖拽底部格子输入音符连线
+        </div>
+        <div class="section-title" style="color:#fff;">时钟同步 (CLOCK)</div>
+        <div class="control-group"><label>BPM</label><input type="range" id="global_bpm" min="60" max="150" value="100"><div class="val-display" id="val_bpm">100</div></div>
+        <div class="section-title">全局调制 (GLOBAL)</div>
+        <div class="control-group"><label>混响 (Wet)</label><input type="range" id="global_reverb" min="0" max="100" value="30"><div class="val-display" id="val_reverb">30%</div></div>
+        <div class="control-group"><label>滤波 (Cutoff)</label><input type="range" id="global_filter" min="0" max="100" value="80"><div class="val-display" id="val_filter">80%</div></div>
+        <div class="section-title">基准调音 (TUNE - C3)</div>
+        <div class="control-group color-guzheng"><label>古筝</label><input type="range" id="tune_guzheng" min="-12" max="12" value="0"><div class="val-display" id="val_guzheng">0</div></div>
+        <div class="control-group color-flute"><label>笛子</label><input type="range" id="tune_flute" min="-12" max="12" value="0"><div class="val-display" id="val_flute">0</div></div>
+        <div class="control-group color-pipa"><label>琵琶</label><input type="range" id="tune_pipa" min="-12" max="12" value="0"><div class="val-display" id="val_pipa">0</div></div>
+        <div class="control-group color-erhu"><label>二胡</label><input type="range" id="tune_erhu" min="-12" max="12" value="0"><div class="val-display" id="val_erhu">0</div></div>
+    </div>
+</div>
+
+<script>
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    let width = canvas.width = window.innerWidth;
+    let height = canvas.height = window.innerHeight;
+
+    let audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const buffers = {};
+    let reverbImpulse = null;
+
+    const instruments = {
+        'guzheng': { file: 'guzheng.wav', originalMidi: 36, color: '#00ffff' },
+        'flute': { file: 'flute.wav', originalMidi: 80, color: '#00ff00' },
+        'pipa': { file: 'pipa.wav', originalMidi: 69, color: '#ffff00' },
+        'erhu': { file: 'erhu.wav', originalMidi: 64, color: '#ff00ff' }
+    };
+    const TARGET_MIDI = 48;
+
+    document.getElementById('test-tone-btn').addEventListener('click', () => {
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        const osc = audioCtx.createOscillator(); const testGain = audioCtx.createGain();
+        osc.connect(testGain); testGain.connect(audioCtx.destination);
+        osc.type = 'sine'; osc.frequency.value = 440; const now = audioCtx.currentTime;
+        testGain.gain.setValueAtTime(0, now); testGain.gain.linearRampToValueAtTime(0.5, now + 0.05);
+        testGain.gain.linearRampToValueAtTime(0, now + 1.5); osc.start(now); osc.stop(now + 1.5);
+    });
+
+    document.getElementById('ui-header').addEventListener('click', () => document.getElementById('ui').parentElement.classList.toggle('collapsed'));
+    function bindSlider(id, displayId, unit = '') { document.getElementById(id).addEventListener('input', (e) => document.getElementById(displayId).innerText = e.target.value + unit); }
+    bindSlider('global_bpm', 'val_bpm'); bindSlider('global_reverb', 'val_reverb', '%'); bindSlider('global_filter', 'val_filter', '%');
+    Object.keys(instruments).forEach(key => bindSlider(`tune_${key}`, `val_${key}`));
+
+    function createReverb() {
+        let length = audioCtx.sampleRate * 2.5; let impulse = audioCtx.createBuffer(2, length, audioCtx.sampleRate);
+        for (let channel = 0; channel < 2; channel++) {
+            let chData = impulse.getChannelData(channel);
+            for (let i = 0; i < length; i++) chData[i] = (Math.random() * 2 - 1) * Math.exp(-i / (audioCtx.sampleRate * 0.4));
+        }
+        reverbImpulse = impulse;
+    }
+
+    async function loadAudio() {
+        createReverb();
+        for (const key of Object.keys(instruments)) {
+            try {
+                const res = await fetch(instruments[key].file);
+                buffers[key] = await audioCtx.decodeAudioData(await res.arrayBuffer());
+            } catch (e) { console.error(`加载失败: ${instruments[key].file}`); }
+        }
+        document.getElementById('loading').style.opacity = 0;
+        setTimeout(() => document.getElementById('loading').style.display = 'none', 500);
+    }
+    loadAudio();
+
+    const activeManualNodes = { guzheng: null, flute: null, pipa: null, erhu: null };
+
+    function getRandomQuadrantPos(inst) {
+        const hw = width / 2, hh = height / 2; const padding = 80; let x = 0, y = 0;
+        if (inst === 'guzheng') { x = padding + Math.random() * (hw - padding*2); y = padding + Math.random() * (hh - padding*2); }
+        if (inst === 'flute')   { x = hw + padding + Math.random() * (hw - padding*2); y = padding + Math.random() * (hh - padding*2); }
+        if (inst === 'pipa')    { x = padding + Math.random() * (hw - padding*2); y = hh + padding + Math.random() * (hh - padding*2); }
+        if (inst === 'erhu')    { x = hw + padding + Math.random() * (hw - padding*2); y = hh + padding + Math.random() * (hh - padding*2); }
+        return { x, y };
+    }
+
+    function triggerAudioNode(instKey, startTime = 0, duration = null, spawnX = undefined, spawnY = undefined) {
+        if (!buffers[instKey]) return;
+
+        const now = startTime > audioCtx.currentTime ? startTime : audioCtx.currentTime + 0.015;
+        const instData = instruments[instKey];
+
+        const source = audioCtx.createBufferSource();
+        source.buffer = buffers[instKey];
+        if (instKey === 'flute' || instKey === 'erhu') source.loop = true;
+
+        const filterNode = audioCtx.createBiquadFilter(); filterNode.type = 'lowpass';
+        filterNode.frequency.value = 100 + (document.getElementById('global_filter').value / 100) * 19900;
+
+        const convolver = audioCtx.createConvolver(); convolver.buffer = reverbImpulse;
+        const dryGain = audioCtx.createGain(); const wetGain = audioCtx.createGain();
+        const reverbVal = document.getElementById('global_reverb').value / 100;
+        dryGain.gain.value = 1.0 - reverbVal; wetGain.gain.value = reverbVal * 1.5;
+
+        const mainGain = audioCtx.createGain();
+
+        source.connect(filterNode); filterNode.connect(dryGain); dryGain.connect(mainGain);
+        filterNode.connect(convolver); convolver.connect(wetGain); wetGain.connect(mainGain);
+        mainGain.connect(audioCtx.destination);
+
+        const userOffset = parseInt(document.getElementById(`tune_${instKey}`).value);
+        let totalShift = (TARGET_MIDI - instData.originalMidi) + userOffset;
+
+        // 移除笛子的 -24 半音限制
+        if (instKey !== 'flute' && totalShift < -24) {
+            totalShift = -24;
+        }
+
+        source.playbackRate.value = Math.pow(2, totalShift / 12);
+
+        mainGain.gain.cancelScheduledValues(0);
+        mainGain.gain.setValueAtTime(0, now);
+
+        if (duration !== null) {
+            const attackDur = 0.02;
+            const releaseTime = (instKey === 'flute' || instKey === 'erhu') ? 0.3 : 0.4;
+            const holdEnd = now + Math.max(attackDur, duration);
+
+            mainGain.gain.linearRampToValueAtTime(1.0, now + attackDur);
+            mainGain.gain.linearRampToValueAtTime(1.0, holdEnd);
+            mainGain.gain.linearRampToValueAtTime(0, holdEnd + releaseTime);
+
+            source.start(now);
+            source.stop(holdEnd + releaseTime + 0.1);
+        } else {
+            mainGain.gain.linearRampToValueAtTime(1.0, now + 0.05);
+            source.start(now);
+            if (activeManualNodes[instKey]) { try { activeManualNodes[instKey].source.stop(); } catch(e){} }
+            activeManualNodes[instKey] = { source, mainGain };
+        }
+
+        if (duration === null) {
+            let vX = spawnX !== undefined ? spawnX : getRandomQuadrantPos(instKey).x;
+            let vY = spawnY !== undefined ? spawnY : getRandomQuadrantPos(instKey).y;
+            visualSystem.spawn(vX, vY, instData.color);
+        }
+    }
+
+    function releaseManualNode(instKey) {
+        const node = activeManualNodes[instKey];
+        if (node) {
+            const now = audioCtx.currentTime;
+            node.mainGain.gain.cancelScheduledValues(now);
+            node.mainGain.gain.setValueAtTime(node.mainGain.gain.value || 1.0, now);
+            const releaseDur = (instKey === 'flute' || instKey === 'erhu') ? 0.8 : 0.4;
+            node.mainGain.gain.linearRampToValueAtTime(0, now + releaseDur);
+            node.source.stop(now + releaseDur + 0.1);
+            activeManualNodes[instKey] = null;
+        }
+    }
+
+    const sequences = { guzheng: Array(16).fill(0), flute: Array(16).fill(0), pipa: Array(16).fill(0), erhu: Array(16).fill(0) };
+    let isDraggingSeq = false; let dragTargetState = 1;
+
+    document.querySelectorAll('.seq-container').forEach(container => {
+        const inst = container.getAttribute('data-inst');
+        for (let i = 0; i < 16; i++) {
+            const stepDiv = document.createElement('div'); stepDiv.className = `step`; stepDiv.dataset.index = i;
+            stepDiv.addEventListener('mousedown', (e) => {
+                isDraggingSeq = true; dragTargetState = sequences[inst][i] === 0 ? 1 : 0;
+                sequences[inst][i] = dragTargetState; updateStepVisual(stepDiv, inst, dragTargetState);
+                e.stopPropagation();
+            });
+            stepDiv.addEventListener('mouseenter', () => {
+                if (isDraggingSeq) { sequences[inst][i] = dragTargetState; updateStepVisual(stepDiv, inst, dragTargetState); }
+            });
+            container.appendChild(stepDiv);
+        }
+    });
+    window.addEventListener('mouseup', () => isDraggingSeq = false);
+    function updateStepVisual(stepDiv, inst, state) { if (state === 1) stepDiv.classList.add(`on-${inst}`); else stepDiv.classList.remove(`on-${inst}`); }
+
+    let isPlaying = false; let current16thNote = 0; let nextNoteTime = 0.0; let timerID;
+    const lookahead = 25.0; const scheduleAheadTime = 0.1;
+
+    function nextNote() {
+        const secondsPerBeat = 60.0 / parseInt(document.getElementById('global_bpm').value);
+        nextNoteTime += 0.25 * secondsPerBeat;
+        current16thNote = (current16thNote + 1) % 16;
+    }
+
+    function scheduleNote(beatNumber, time) {
+        const delay = Math.max(0, (time - audioCtx.currentTime) * 1000);
+
+        setTimeout(() => {
+            document.querySelectorAll('.step').forEach(el => el.classList.remove('playing-head'));
+            Object.keys(instruments).forEach(inst => {
+                document.getElementById(`seq-${inst}`).children[beatNumber].classList.add('playing-head');
+                const seq = sequences[inst];
+                if (seq[beatNumber] === 1 && ((beatNumber === 0) ? true : (seq[beatNumber - 1] === 0))) {
+                    let pos = getRandomQuadrantPos(inst);
+                    visualSystem.spawn(pos.x, pos.y, instruments[inst].color);
+                }
+            });
+        }, delay);
+
+        const stepSecs = 0.25 * (60.0 / parseInt(document.getElementById('global_bpm').value));
+
+        Object.keys(instruments).forEach(inst => {
+            const seq = sequences[inst];
+            if (seq[beatNumber] === 1) {
+                let isAttack = (beatNumber === 0) ? true : (seq[beatNumber - 1] === 0);
+                if (isAttack) {
+                    let durSteps = 1; let nextBeat = beatNumber + 1;
+                    while (nextBeat < 16 && seq[nextBeat] === 1) { durSteps++; nextBeat++; }
+                    try { triggerAudioNode(inst, time, durSteps * stepSecs); } catch(e) { }
+                }
+            }
+        });
+    }
+
+    function scheduler() {
+        if (!isPlaying) return;
+        while (nextNoteTime < audioCtx.currentTime + scheduleAheadTime) {
+            scheduleNote(current16thNote, nextNoteTime);
+            nextNote();
+        }
+        timerID = setTimeout(scheduler, lookahead);
+    }
+
+    const playBtn = document.getElementById('play-btn');
+    playBtn.addEventListener('click', () => {
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        isPlaying = !isPlaying;
+        if (isPlaying) {
+            playBtn.classList.add('playing');
+            current16thNote = 0;
+            nextNoteTime = audioCtx.currentTime + 0.05;
+            scheduler();
+        } else {
+            playBtn.classList.remove('playing');
+            clearTimeout(timerID);
+            document.querySelectorAll('.step').forEach(el => el.classList.remove('playing-head'));
+        }
+    });
+
+    let currentManualInst = null;
+    function getQuadrantInst(x, y) { const hw = width / 2, hh = height / 2; if (x < hw && y < hh) return 'guzheng'; if (x >= hw && y < hh) return 'flute'; if (x < hw && y >= hh) return 'pipa'; return 'erhu'; }
+    window.addEventListener('mousedown', (e) => {
+        if (e.target.closest('#ui') || e.target.closest('.seq-container') || e.target.closest('#play-btn')) return;
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        currentManualInst = getQuadrantInst(e.clientX, e.clientY);
+        document.getElementById(`bg-${currentManualInst}`).classList.add('active');
+        triggerAudioNode(currentManualInst, 0, null, e.clientX, e.clientY);
+    });
+    window.addEventListener('mousemove', (e) => {
+        if (currentManualInst) {
+            const newInst = getQuadrantInst(e.clientX, e.clientY);
+            if (newInst !== currentManualInst) {
+                releaseManualNode(currentManualInst);
+                document.getElementById(`bg-${currentManualInst}`).classList.remove('active');
+                currentManualInst = newInst; document.getElementById(`bg-${currentManualInst}`).classList.add('active');
+                triggerAudioNode(currentManualInst, 0, null, e.clientX, e.clientY);
+            }
+        }
+    });
+    window.addEventListener('mouseup', () => {
+        if (currentManualInst) { releaseManualNode(currentManualInst); document.querySelectorAll('.quadrant-bg').forEach(el => el.classList.remove('active')); currentManualInst = null; }
+    });
+    window.addEventListener('resize', () => { width = canvas.width = window.innerWidth; height = canvas.height = window.innerHeight; });
+
+    const visualSystem = {
+        pool: [],
+        spawn(x, y, color) {
+            if (isNaN(x) || isNaN(y)) return;
+            this.pool.push({ type: 'ring', x, y, r: 5, maxR: 120, color, life: 1.0, decay: 0.03 });
+            for (let i = 0; i < 10; i++) {
+                const angle = (Math.PI * 2 / 10) * i; const dist = 40 + Math.random() * 30;
+                this.pool.push({ type: 'star', x, y, startX: x, startY: y, targetX: x + Math.cos(angle) * dist, targetY: y + Math.sin(angle) * dist, r: 2 + Math.random() * 2, color, life: 1.0, decay: 0.02 + Math.random() * 0.02 });
+            }
+        },
+        update() {
+            ctx.clearRect(0, 0, width, height); ctx.fillStyle = '#050505'; ctx.fillRect(0, 0, width, height);
+            ctx.save(); ctx.globalCompositeOperation = 'lighter';
+            for (let i = this.pool.length - 1; i >= 0; i--) {
+                let p = this.pool[i]; p.life -= p.decay;
+                if (p.life <= 0) { this.pool.splice(i, 1); continue; }
+                if (p.type === 'ring') {
+                    p.r += (p.maxR - p.r) * 0.1; ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+                    ctx.strokeStyle = p.color; ctx.globalAlpha = p.life * 0.5; ctx.lineWidth = 3 * p.life; ctx.shadowBlur = 15; ctx.shadowColor = p.color; ctx.stroke();
+                } else {
+                    const curX = p.startX + (p.targetX - p.startX) * (1 - p.life); const curY = p.startY + (p.targetY - p.startY) * (1 - p.life);
+                    ctx.beginPath(); ctx.arc(curX, curY, p.r * p.life, 0, Math.PI * 2); ctx.fillStyle = p.color; ctx.globalAlpha = p.life; ctx.shadowBlur = 10; ctx.shadowColor = p.color; ctx.fill();
+                }
+            }
+            ctx.restore();
+        }
+    };
+    function animate() { visualSystem.update(); requestAnimationFrame(animate); } animate();
+</script>
+</body>
+</html>
